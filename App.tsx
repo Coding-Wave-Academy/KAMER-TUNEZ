@@ -1,17 +1,20 @@
 
 import React, { useState } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { Page, Song } from './types';
 import BottomNav from './components/BottomNav';
 import MiniPlayer from './components/MiniPlayer';
+import FullScreenPlayer from './components/FullScreenPlayer';
 import HomePage from './pages/HomePage';
 import CreatePage from './pages/CreatePage';
 import StatsPage from './pages/StatsPage';
 import ProfilePage from './pages/ProfilePage';
 
 const App: React.FC = () => {
-  const [activePage, setActivePage] = useState<Page>(Page.Create);
+  const [activePage, setActivePage] = useState<Page>(Page.Home);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isFullScreenPlayerOpen, setFullScreenPlayerOpen] = useState(false);
 
   const handlePlaySong = (song: Song) => {
     setCurrentSong(song);
@@ -19,11 +22,18 @@ const App: React.FC = () => {
   };
 
   const handleTogglePlay = () => {
+    if (!currentSong) return;
     setIsPlaying(prev => !prev);
   }
 
+  const handleClosePlayer = () => {
+    setIsPlaying(false);
+    setCurrentSong(null);
+    setFullScreenPlayerOpen(false);
+  }
+
   const renderPage = () => {
-    const props = { playSong: handlePlaySong };
+    const props = { playSong: handlePlaySong, setActivePage };
     switch (activePage) {
       case Page.Home:
         return <HomePage {...props} />;
@@ -34,7 +44,7 @@ const App: React.FC = () => {
       case Page.Profile:
         return <ProfilePage />;
       default:
-        return <CreatePage {...props} />;
+        return <HomePage {...props} />;
     }
   };
 
@@ -45,13 +55,30 @@ const App: React.FC = () => {
           <main className={`pb-24 ${currentSong ? 'pb-44' : ''}`}>
             {renderPage()}
           </main>
-          {currentSong && (
-             <MiniPlayer 
-                song={currentSong} 
-                isPlaying={isPlaying} 
+          
+          <AnimatePresence>
+            {currentSong && !isFullScreenPlayerOpen && (
+               <MiniPlayer 
+                  song={currentSong} 
+                  isPlaying={isPlaying} 
+                  onTogglePlay={handleTogglePlay}
+                  onClose={handleClosePlayer}
+                  onOpenFullScreen={() => setFullScreenPlayerOpen(true)}
+               />
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {isFullScreenPlayerOpen && currentSong && (
+              <FullScreenPlayer
+                song={currentSong}
+                isPlaying={isPlaying}
                 onTogglePlay={handleTogglePlay}
-             />
-          )}
+                onClose={() => setFullScreenPlayerOpen(false)}
+              />
+            )}
+          </AnimatePresence>
+
           <BottomNav activePage={activePage} setActivePage={setActivePage} />
         </div>
       </div>
