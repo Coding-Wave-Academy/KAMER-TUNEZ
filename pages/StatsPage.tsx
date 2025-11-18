@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
-import { ChartData } from '../types';
+import { ChartData, CampaignData } from '../types';
 import { GoogleGenAI } from '@google/genai';
+import * as env from '../services/env';
 
 const mockStreams: ChartData[] = [
   { name: 'Mon', value: 2400 },
@@ -23,16 +23,25 @@ const mockDemographics: ChartData[] = [
 ];
 const COLORS = ['#1ED760', '#1DB954', '#158c42', '#0d5d2a', '#083b1b'];
 
-// Helper function to safely get AI client
 const getAiClient = (): GoogleGenAI | null => {
-    if (!process.env.API_KEY) {
+    if (!env.GEMINI_API_KEY || env.GEMINI_API_KEY === "YOUR_GEMINI_API_KEY_HERE") {
+        console.warn("Gemini API key is not configured.");
         return null;
     }
-    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+    try {
+        return new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+    } catch (error) {
+        console.error("Failed to initialize Gemini AI Client:", error);
+        alert("Could not initialize AI features. Please check if the API key is valid.");
+        return null;
+    }
 };
 
+interface StatsPageProps {
+    campaignData: CampaignData | null;
+}
 
-const StatsPage: React.FC = () => {
+const StatsPage: React.FC<StatsPageProps> = ({ campaignData }) => {
     const [insights, setInsights] = useState('');
     const [isLoadingInsights, setIsLoadingInsights] = useState(true);
 
@@ -51,8 +60,18 @@ const StatsPage: React.FC = () => {
                 weeklyStreams: mockStreams.reduce((acc, cur) => acc + cur.value, 0),
                 topRegion: mockDemographics[0].name,
                 streamsData: mockStreams,
-                demographicsData: mockDemographics
+                demographicsData: mockDemographics,
+                activeCampaign: campaignData,
             };
+
+            let campaignPrompt = '';
+            if (dataSummary.activeCampaign) {
+                campaignPrompt = `
+                An active promotion campaign for the song "${dataSummary.activeCampaign.songTitle}" is running with a goal of "${dataSummary.activeCampaign.goal}" targeting the ${dataSummary.activeCampaign.regions.join(', ')} regions.
+                Please incorporate this campaign into your analysis and suggestions.
+                `;
+            }
+
             const prompt = `
                 As an expert music industry analyst for a Cameroonian artist, analyze the following data focusing on performance within Cameroon and provide actionable insights.
                 The response should be concise, mobile-friendly, and use markdown for formatting (bolding, lists).
@@ -62,10 +81,11 @@ const StatsPage: React.FC = () => {
                 - Top listening region in Cameroon: ${dataSummary.topRegion}
                 - Daily streams breakdown: ${JSON.stringify(dataSummary.streamsData)}
                 - Listener demographics by region in Cameroon: ${JSON.stringify(dataSummary.demographicsData)}
+                ${campaignPrompt}
 
                 Provide:
                 1.  **Summary**: A quick overview of the week's performance in Cameroon.
-                2.  **Key Insights**: 2-3 bullet points on what the data means (e.g., peak days, regional audience concentration).
+                2.  **Key Insights**: 2-3 bullet points on what the data means (e.g., peak days, regional audience concentration, campaign impact).
                 3.  **Growth Plan**: 2-3 actionable suggestions for the artist to grow their audience within Cameroon based on this data. (e.g., target promotions in specific regions, collaborate with artists from those regions).
             `;
 
@@ -81,12 +101,21 @@ const StatsPage: React.FC = () => {
         };
 
         fetchInsights();
-    }, []);
+    }, [campaignData]);
 
     return (
-        <div className="p-4" style={{ background: 'radial-gradient(circle at top, #1DB95430, #0A0F0D 50%)' }}>
+        <div className="p-4 pb-24" style={{ background: 'radial-gradient(circle at top, #1DB95430, #0A0F0D 50%)' }}>
             <h1 className="text-3xl font-bold text-white my-4">Your Stats</h1>
             
+            {campaignData && (
+                <div className="bg-brand-pink/20 border border-brand-pink p-4 rounded-xl mb-6">
+                    <h2 className="font-bold text-white mb-2">Active Campaign</h2>
+                    <p className="text-sm text-brand-light-gray">
+                        Promoting "<strong className="text-white">{campaignData.songTitle}</strong>" to increase <strong className="text-white">{campaignData.goal}</strong>.
+                    </p>
+                </div>
+            )}
+
             <div className="bg-brand-card p-4 rounded-xl mb-6">
                 <h2 className="font-bold text-white mb-2">Weekly Streams</h2>
                 <div style={{ width: '100%', height: 200 }}>

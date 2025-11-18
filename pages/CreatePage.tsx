@@ -1,52 +1,51 @@
-
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Song, Page } from '../types';
-import { EditIcon, UploadIcon, CreateWithAIIcon, MoreIcon, FilterIcon } from '../components/icons';
+import { Song, Page, FilterType } from '../types';
+import { EditIcon, UploadIcon, CreateWithAIIcon, FilterIcon } from '../components/icons';
 import UploadSongModal from '../components/UploadSongModal';
-import AudioPlayer from '../components/AudioPlayer';
+import VoiceEditor from '../components/VoiceEditor';
+import FilterModal from '../components/FilterModal';
+import SongItem from '../components/SongItem';
 import { GoogleGenAI, Modality } from '@google/genai';
 import { generateMusic } from '../services/kieApi';
+import { generateLyrics } from '../services/deepseekApi';
+import * as env from '../services/env';
 
-const mockSongs: Song[] = [
-  { id: '1', title: 'Life in the Ghetto', description: 'Describe the style of your song', coverArt: 'https://picsum.photos/seed/song1/100/100', src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
-  { id: '2', title: 'Makossa Feelings', description: 'Upbeat and vibrant track', coverArt: 'https://picsum.photos/seed/song2/100/100', src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
-];
+interface CreatePageProps {
+  songs: Song[];
+  playSong: (song: Song) => void;
+  setActivePage: (page: Page) => void;
+  openOptions: (song: Song) => void;
+  onSongAdded: (song: Omit<Song, 'id'>) => Promise<Song>;
+  dailyCredits: number;
+  onUseCredit: () => void;
+}
 
 const GENRES = ["Makossa", "Bikutsi", "Afrobeat", "Njang", "Ambas-Gida"];
 type Mode = 'Instrumental' | 'Lyrics';
 type CreateView = 'hub' | 'ai_creation';
 
-interface CreatePageProps {
-  playSong: (song: Song) => void;
-  setActivePage: (page: Page) => void;
-}
-
-// Optimized: Component defined outside
-const SongItem: React.FC<{ song: Song; onPlay: (song: Song) => void }> = ({ song, onPlay }) => (
-    <button onClick={() => onPlay(song)} className="w-full flex items-center space-x-4 p-2 rounded-lg hover:bg-brand-card/50 text-left">
-        <img src={song.coverArt} alt={song.title} className="w-14 h-14 rounded-md flex-shrink-0" />
-        <div className="flex-grow min-w-0">
-            <h3 className="font-bold text-white truncate">{song.title}</h3>
-            <p className="text-sm text-brand-light-gray truncate">{song.description}</p>
-        </div>
-        <div className="text-brand-light-gray">
-            <MoreIcon className="h-6 w-6"/>
-        </div>
-    </button>
-);
-
-// Helper function to safely get AI client
 const getAiClient = (): GoogleGenAI | null => {
-    if (!process.env.API_KEY) {
-        alert("Gemini API key is not configured. AI features are disabled.");
-        return null;
-    }
-    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  if (!env.GEMINI_API_KEY || env.GEMINI_API_KEY === "YOUR_GEMINI_API_KEY_HERE") {
+    console.warn("Gemini API key is not configured. AI features are disabled.");
+    return null;
+  }
+  try {
+    return new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+  } catch (error) {
+    console.error("Failed to initialize Gemini AI Client:", error);
+    alert("Could not initialize AI features. Please check if the API key is valid.");
+    return null;
+  }
 };
 
-// Optimized: Component defined outside
-const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => void }> = ({ onBack, playSong }) => {
+const AICreationView: React.FC<{
+    onBack: () => void;
+    playSong: (song: Song) => void;
+    onSongAdded: (song: Omit<Song, 'id'>) => Promise<Song>;
+    dailyCredits: number;
+    onUseCredit: () => void;
+}> = ({ onBack, playSong, onSongAdded, dailyCredits, onUseCredit }) => {
     const [mode, setMode] = useState<Mode>('Lyrics');
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -56,6 +55,7 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
     const [isLoadingText, setIsLoadingText] = useState(false);
     const [isEditingCover, setIsEditingCover] = useState(false);
     const [coverPrompt, setCoverPrompt] = useState('');
+    const [isVoiceEditorOpen, setVoiceEditorOpen] = useState(false);
 
     const resetForm = () => {
         setGeneratedSong(null);
@@ -64,37 +64,38 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
         setLyrics('');
     };
 
-     const generateWithAI = useCallback(async (field: 'description' | 'lyrics') => {
-        const ai = getAiClient();
-        if (!ai) return;
-        
-        setIsLoadingText(true);
-        try {
-            let prompt = '';
-            if (field === 'description') {
-                prompt = `Generate a short, vibrant song description for a Cameroonian song titled "${title || 'Untitled'}".`;
-            } else if (field === 'lyrics') {
-                prompt = `Generate song lyrics for a Cameroonian ${description || 'afrobeat'} song titled "${title || 'Untitled'}". The lyrics should be in English, with some Cameroonian Pidgin English phrases.`;
+    const generateWithAI = useCallback(async (field: 'description' | 'lyrics') => {
+        if (field === 'lyrics') {
+            setIsLoadingText(true);
+            try {
+                const generated = await generateLyrics(description || `a Cameroonian ${mode.toLowerCase()} song`);
+                setLyrics(generated);
+            } catch (error) {
+                console.error("Error generating lyrics:", error);
+                alert("Failed to generate lyrics.");
+            } finally {
+                setIsLoadingText(false);
             }
-
-            const response = await ai.models.generateContent({model: 'gemini-2.5-flash', contents: prompt });
-            const text = response.text.trim().replace(/^"|"$/g, '');
-            
-            if (field === 'description') setDescription(text);
-            if (field === 'lyrics') setLyrics(text);
-
-        } catch (error) {
-            console.error("Error generating text with AI:", error);
-            alert("Failed to generate text. Please check your API key and try again.");
-        } finally {
-            setIsLoadingText(false);
+        } else {
+             const ai = getAiClient();
+             if (!ai) { alert("Gemini API key is not configured."); return; }
+             setIsLoadingText(true);
+             try {
+                 const prompt = `Generate a short, vibrant song description for a Cameroonian song titled "${title || 'Untitled'}".`;
+                 const response = await ai.models.generateContent({model: 'gemini-2.5-flash', contents: prompt });
+                 setDescription(response.text.trim().replace(/^"|"$/g, ''));
+             } catch (error) {
+                 console.error("Error generating description:", error);
+                 alert("Failed to generate description.");
+             } finally {
+                 setIsLoadingText(false);
+             }
         }
-    }, [title, description]);
-
+    }, [title, description, mode]);
+    
     const handleGenreSelect = async (genre: string) => {
         const ai = getAiClient();
-        if (!ai) return;
-
+        if (!ai) { alert("Gemini API key is not configured."); return; }
         setIsLoadingText(true);
         try {
             const prompt = `Generate a one-sentence, evocative musical style description for a song in the Cameroonian genre of "${genre}".`;
@@ -110,7 +111,6 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
     const generateCoverArt = async (artPrompt: string) => {
         const ai = getAiClient();
         if (!ai) return 'https://picsum.photos/seed/no-api-key/512/512';
-
         try {
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash-image',
@@ -118,39 +118,44 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
                 config: { responseModalities: [Modality.IMAGE] },
             });
             for (const part of response.candidates[0].content.parts) {
-                if (part.inlineData) {
-                    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-                }
+                if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
             }
-            return 'https://picsum.photos/seed/default/512/512';
-        } catch (error) {
-            console.error("Error generating cover art:", error);
-            return 'https://picsum.photos/seed/error/512/512';
-        }
+        } catch (error) { console.error("Error generating cover art:", error); }
+        return 'https://picsum.photos/seed/error/512/512';
     };
 
     const handleGenerateMusic = async () => {
+        if (dailyCredits <= 0) {
+            alert("You've reached your daily generation limit. Please upgrade or wait until tomorrow.");
+            return;
+        }
         setIsGenerating(true);
         setGeneratedSong(null);
         
-        const audioUrl = await generateMusic({
-            prompt: `${title} - ${description}`,
-            durationInSeconds: 210 // 3.5 minutes
-        });
+        try {
+            const audioUrl = await generateMusic({ prompt: `${title} - ${description}` });
+            const artPrompt = `Vibrant, abstract album cover for a song titled "${title}" described as "${description}". Modern Cameroonian art style.`;
+            setCoverPrompt(artPrompt);
+            const coverArtUrl = await generateCoverArt(artPrompt);
 
-        const artPrompt = `Vibrant, abstract album cover for a song titled "${title}" described as "${description}". Modern Cameroonian art style.`;
-        setCoverPrompt(artPrompt);
-        const coverArtUrl = await generateCoverArt(artPrompt);
+            const newSongData = {
+                title: title || "Untitled AI Track",
+                description: description,
+                src: audioUrl,
+                coverArt: coverArtUrl,
+                origin: 'ai' as const,
+            };
+            
+            const newSongInDb = await onSongAdded(newSongData);
+            setGeneratedSong(newSongInDb);
+            onUseCredit();
 
-        setGeneratedSong({
-            id: Date.now().toString(),
-            title: title || "Untitled Masterpiece",
-            description: description,
-            src: audioUrl,
-            coverArt: coverArtUrl,
-        });
-
-        setIsGenerating(false);
+        } catch (error) {
+             console.error("Music generation failed:", error);
+             alert("Sorry, there was an error generating your music. Please try again.");
+        } finally {
+            setIsGenerating(false);
+        }
     };
     
      const handleRegenerateCover = async () => {
@@ -160,7 +165,23 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
          setGeneratedSong(prev => prev ? { ...prev, coverArt: newCover } : null);
          setIsLoadingText(false);
          setIsEditingCover(false);
-    }
+    };
+    
+    const handleSaveMixedSong = async (mixedAudioBlob: Blob) => {
+        if (!generatedSong) return;
+        const mixedAudioUrl = URL.createObjectURL(mixedAudioBlob);
+        const newSongData = {
+            ...generatedSong,
+            title: `${generatedSong.title} (Vocal Mix)`,
+            src: mixedAudioUrl,
+            origin: 'mixed' as const,
+        };
+        await onSongAdded(newSongData);
+        setVoiceEditorOpen(false);
+        resetForm();
+        alert("Vocal mix saved successfully!");
+    };
+
 
     return (
         <motion.div 
@@ -171,14 +192,23 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
             className="absolute inset-0 bg-brand-dark z-10 overflow-y-auto"
             style={{ background: 'radial-gradient(circle at top, #B91D7330, #0A0F0D 50%)' }}
         >
-             <div className="flex items-center p-4">
+            <AnimatePresence>
+                {isVoiceEditorOpen && generatedSong && (
+                    <VoiceEditor
+                        instrumentalUrl={generatedSong.src}
+                        onClose={() => setVoiceEditorOpen(false)}
+                        onSave={handleSaveMixedSong}
+                    />
+                )}
+            </AnimatePresence>
+            <div className="flex items-center p-4">
                 <button onClick={onBack} className="mr-4 text-white">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                 </button>
                 <h2 className="text-xl font-bold">Create with AI</h2>
             </div>
-             <div className="p-4 pb-40">
-                 {isGenerating && (
+            <div className="p-4 pb-40">
+                {isGenerating && (
                     <div className="flex flex-col items-center justify-center my-8">
                         <div className="relative w-32 h-32">
                              <div className="absolute inset-0 bg-brand-pink rounded-full opacity-20 animate-ping"></div>
@@ -192,23 +222,30 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
                 
                 {!isGenerating && generatedSong && (
                      <div className="my-4 text-center">
-                        <h2 className="text-2xl font-bold mb-4">Your Track is Ready!</h2>
+                        <h2 className="text-2xl font-bold mb-4">Your Instrumental is Ready!</h2>
                         <div className="relative w-64 h-64 mx-auto rounded-xl shadow-lg mb-4">
                             <img src={generatedSong.coverArt} alt="Generated Cover Art" className="w-full h-full object-cover rounded-xl"/>
                             <button onClick={() => setIsEditingCover(true)} className="absolute top-2 right-2 bg-black/50 p-2 rounded-full text-white hover:bg-black/80">
                                 <EditIcon className="w-5 h-5"/>
                             </button>
                         </div>
-                        <AudioPlayer src={generatedSong.src} />
-                         <div className="flex items-center space-x-4 mt-6">
-                            <button onClick={resetForm} className="w-full bg-brand-gray py-3 rounded-full font-bold">Create More</button>
-                            <button onClick={() => playSong(generatedSong)} className="w-full bg-brand-pink text-white py-3 rounded-full font-bold">Play Song</button>
+                        <audio controls src={generatedSong.src} className="w-full"></audio>
+                         <div className="space-y-4 mt-6">
+                             <button onClick={() => setVoiceEditorOpen(true)} className="w-full bg-brand-pink text-white py-3 rounded-full font-bold">Add Vocals & Edit</button>
+                            <div className="flex items-center space-x-4">
+                               <button onClick={resetForm} className="w-full bg-brand-gray py-3 rounded-full font-bold">Create More</button>
+                               <button onClick={() => playSong(generatedSong)} className="w-full bg-brand-green text-black py-3 rounded-full font-bold">Play Song</button>
+                           </div>
                         </div>
                     </div>
                 )}
 
                 {!isGenerating && !generatedSong && (
                     <>
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-lg font-bold">Daily Generations Left:</h3>
+                            <div className="bg-brand-green text-black font-bold rounded-full px-4 py-1">{dailyCredits}</div>
+                        </div>
                         <div className="bg-brand-card p-1 rounded-full flex items-center max-w-sm mx-auto mb-8">
                             <button onClick={() => setMode('Instrumental')} className={`w-1/2 py-2 rounded-full text-sm font-bold transition-colors ${mode === 'Instrumental' ? 'bg-brand-pink text-white' : 'text-brand-light-gray'}`}>Instrumental</button>
                             <button onClick={() => setMode('Lyrics')} className={`w-1/2 py-2 rounded-full text-sm font-bold transition-colors ${mode === 'Lyrics' ? 'bg-brand-pink text-white' : 'text-brand-light-gray'}`}>Lyrics</button>
@@ -240,7 +277,7 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
 
             {!generatedSong && (
                 <div className="absolute bottom-0 left-0 right-0 p-4 bg-brand-dark/80 backdrop-blur-sm border-t border-brand-gray/20">
-                    <button onClick={handleGenerateMusic} disabled={isGenerating || isLoadingText || !title} className="w-full bg-brand-pink text-white font-bold py-4 rounded-full text-lg disabled:bg-brand-gray disabled:cursor-not-allowed">
+                    <button onClick={handleGenerateMusic} disabled={isGenerating || isLoadingText || !title || dailyCredits <= 0} className="w-full bg-brand-pink text-white font-bold py-4 rounded-full text-lg disabled:bg-brand-gray disabled:cursor-not-allowed">
                         {isGenerating ? 'Generating...' : 'Generate'}
                     </button>
                 </div>
@@ -264,12 +301,19 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
     );
 }
 
-const CreatePage: React.FC<CreatePageProps> = ({ playSong, setActivePage }) => {
+const CreatePage: React.FC<CreatePageProps> = ({ songs, playSong, setActivePage, openOptions, onSongAdded, dailyCredits, onUseCredit }) => {
     const [view, setView] = useState<CreateView>('hub');
     const [isUploadModalOpen, setUploadModalOpen] = useState(false);
+    const [isFilterModalOpen, setFilterModalOpen] = useState(false);
+    const [filter, setFilter] = useState<FilterType>('all');
+
+    const filteredSongs = useMemo(() => {
+        if (filter === 'all') return songs;
+        return songs.filter(song => song.origin === filter);
+    }, [songs, filter]);
 
     if (view === 'ai_creation') {
-        return <AICreationView onBack={() => setView('hub')} playSong={playSong} />;
+        return <AICreationView onBack={() => setView('hub')} playSong={playSong} onSongAdded={onSongAdded} dailyCredits={dailyCredits} onUseCredit={onUseCredit}/>;
     }
 
     return (
@@ -300,18 +344,32 @@ const CreatePage: React.FC<CreatePageProps> = ({ playSong, setActivePage }) => {
 
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-2xl font-bold text-white">My Songs</h2>
-                    <button className="flex items-center space-x-2 text-brand-light-gray hover:text-white">
+                    <button onClick={() => setFilterModalOpen(true)} className="flex items-center space-x-2 text-brand-light-gray hover:text-white">
                         <span>Filter</span>
                         <FilterIcon className="h-5 w-5"/>
                     </button>
                 </div>
 
                 <div className="space-y-2">
-                    {mockSongs.map(song => <SongItem key={song.id} song={song} onPlay={playSong} />)}
+                     {filteredSongs.length > 0 ? (
+                        filteredSongs.map(song => 
+                            <SongItem 
+                                key={song.id} 
+                                song={song} 
+                                onPlay={playSong} 
+                                onOpenOptions={openOptions}
+                            />
+                        )
+                    ) : (
+                        <p className="text-brand-gray text-center py-8">No songs match your filter. Try creating some new music!</p>
+                    )}
                 </div>
             </div>
             <AnimatePresence>
-                {isUploadModalOpen && <UploadSongModal onClose={() => setUploadModalOpen(false)} />}
+                {isUploadModalOpen && <UploadSongModal onClose={() => setUploadModalOpen(false)} onSongAdded={onSongAdded} />}
+            </AnimatePresence>
+            <AnimatePresence>
+                {isFilterModalOpen && <FilterModal currentFilter={filter} onFilterChange={setFilter} onClose={() => setFilterModalOpen(false)} />}
             </AnimatePresence>
         </div>
     );

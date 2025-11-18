@@ -1,7 +1,6 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { Page, Song } from './types';
+import { Page, Song, CampaignData } from './types';
 import BottomNav from './components/BottomNav';
 import MiniPlayer from './components/MiniPlayer';
 import FullScreenPlayer from './components/FullScreenPlayer';
@@ -9,17 +8,33 @@ import HomePage from './pages/HomePage';
 import CreatePage from './pages/CreatePage';
 import StatsPage from './pages/StatsPage';
 import ProfilePage from './pages/ProfilePage';
+import CampaignPage from './pages/CampaignPage';
+import SongOptionsModal from './components/SongOptionsModal';
+import { getSongs, addSong, deleteSong as deleteSongFromDb } from './firebase/firestore';
 
 const App: React.FC = () => {
   const [activePage, setActivePage] = useState<Page>(Page.Home);
+  const [songs, setSongs] = useState<Song[]>([]);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isFullScreenPlayerOpen, setFullScreenPlayerOpen] = useState(false);
-  
+  const [isOptionsModalOpen, setOptionsModalOpen] = useState(false);
+  const [selectedSongForOptions, setSelectedSongForOptions] = useState<Song | null>(null);
+  const [activeCampaign, setActiveCampaign] = useState<CampaignData | null>(null);
+  const [dailyCredits, setDailyCredits] = useState(5);
+
   // Centralized Audio Engine
   const audioRef = useRef<HTMLAudioElement>(null);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+
+  useEffect(() => {
+    const fetchSongs = async () => {
+      const userSongs = await getSongs();
+      setSongs(userSongs);
+    };
+    fetchSongs();
+  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -27,10 +42,7 @@ const App: React.FC = () => {
 
     const setAudioData = () => setDuration(audio.duration);
     const setAudioTime = () => setCurrentTime(audio.currentTime);
-    const handlePlaybackEnded = () => {
-      setIsPlaying(false);
-      // Optional: play next song in a queue here
-    };
+    const handlePlaybackEnded = () => setIsPlaying(false);
 
     audio.addEventListener('loadedmetadata', setAudioData);
     audio.addEventListener('timeupdate', setAudioTime);
@@ -44,72 +56,90 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (isPlaying) {
-      audio.play().catch(e => console.error("Audio playback error:", e));
-    } else {
-      audio.pause();
+    if (audioRef.current) {
+      isPlaying ? audioRef.current.play().catch(console.error) : audioRef.current.pause();
     }
   }, [isPlaying]);
 
   const handlePlaySong = useCallback((song: Song) => {
     setCurrentSong(song);
-    setIsPlaying(true);
     if (audioRef.current) {
       audioRef.current.src = song.src;
       audioRef.current.load();
-      audioRef.current.play().catch(e => console.error("Audio playback error on new song:", e));
+      setIsPlaying(true);
     }
   }, []);
 
-  const handleTogglePlay = useCallback(() => {
-    if (!currentSong) return;
-    setIsPlaying(prev => !prev);
-  }, [currentSong]);
+  const handleTogglePlay = useCallback(() => currentSong && setIsPlaying(prev => !prev), [currentSong]);
 
   const handleClosePlayer = useCallback(() => {
     setIsPlaying(false);
     setCurrentSong(null);
     setFullScreenPlayerOpen(false);
     if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-    }
-  }, []);
-  
-  const handleSeek = useCallback((time: number) => {
-    if (audioRef.current) {
-        audioRef.current.currentTime = time;
-        setCurrentTime(time);
+      audioRef.current.pause();
+      audioRef.current.src = '';
     }
   }, []);
 
+  const handleSeek = useCallback((time: number) => {
+    if (audioRef.current) audioRef.current.currentTime = time;
+  }, []);
+
+  const handleOpenOptions = useCallback((song: Song) => {
+    setSelectedSongForOptions(song);
+    setOptionsModalOpen(true);
+  }, []);
+
+  const handleSongAdded = useCallback(async (newSongData: Omit<Song, 'id'>): Promise<Song> => {
+    const newSong = await addSong(newSongData);
+    setSongs(prev => [newSong, ...prev]);
+    return newSong;
+  }, []);
+
+  const handleDeleteSong = useCallback(async (songId: string) => {
+    await deleteSongFromDb(songId);
+    setSongs(prev => prev.filter(s => s.id !== songId));
+    if (currentSong?.id === songId) handleClosePlayer();
+    setOptionsModalOpen(false);
+  }, [currentSong, handleClosePlayer]);
+
+  const handleLaunchCampaign = useCallback((campaignData: CampaignData) => {
+    setActiveCampaign(campaignData);
+    setActivePage(Page.Stats);
+  }, []);
 
   const renderPage = () => {
-    const props = { playSong: handlePlaySong, setActivePage };
+    const commonProps = {
+      playSong: handlePlaySong,
+      setActivePage,
+      songs,
+      openOptions: handleOpenOptions,
+    };
     switch (activePage) {
       case Page.Home:
-        return <HomePage {...props} />;
+        return <HomePage {...commonProps} />;
       case Page.Create:
-        return <CreatePage {...props} />;
+        return <CreatePage {...commonProps} onSongAdded={handleSongAdded} dailyCredits={dailyCredits} onUseCredit={() => setDailyCredits(c => Math.max(0, c - 1))} />;
       case Page.Stats:
-        return <StatsPage />;
+        return <StatsPage campaignData={activeCampaign} />;
       case Page.Profile:
         return <ProfilePage />;
+      case Page.Campaign:
+        return <CampaignPage songs={songs} onLaunchCampaign={handleLaunchCampaign} onBack={() => setActivePage(Page.Home)}/>;
       default:
-        return <HomePage {...props} />;
+        return <HomePage {...commonProps} />;
     }
   };
 
+  const mainContentPadding = currentSong ? (isFullScreenPlayerOpen ? 'pb-24' : 'pb-44') : 'pb-24';
+
   return (
     <>
-      {/* This single audio element powers the entire app */}
       <audio ref={audioRef} preload="metadata" />
-
       <div className="md:hidden">
         <div className="bg-brand-dark min-h-screen text-white font-sans">
-          <main className={currentSong ? 'pb-44' : 'pb-24'}>
+          <main className={`transition-all duration-300 ${mainContentPadding}`}>
             {renderPage()}
           </main>
           
@@ -139,6 +169,20 @@ const App: React.FC = () => {
                 onSeek={handleSeek}
               />
             )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+              {isOptionsModalOpen && selectedSongForOptions && (
+                  <SongOptionsModal
+                      song={selectedSongForOptions}
+                      onClose={() => setOptionsModalOpen(false)}
+                      onDelete={handleDeleteSong}
+                      onPromote={() => {
+                        setOptionsModalOpen(false);
+                        setActivePage(Page.Campaign)
+                      }}
+                  />
+              )}
           </AnimatePresence>
 
           <BottomNav activePage={activePage} setActivePage={setActivePage} />

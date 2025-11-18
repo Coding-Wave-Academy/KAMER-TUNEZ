@@ -1,15 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
-import { motion, PanInfo, useAnimation } from 'framer-motion';
+import { motion, PanInfo } from 'framer-motion';
 import { Song, Page } from '../types';
-import { BellIcon, FilterIcon, MoreIcon } from '../components/icons';
-
-const mockSongs: Song[] = [
-  { id: '1', title: 'Life in the Ghetto', description: 'Describe the style of your song', coverArt: 'https://picsum.photos/seed/song1/100/100', src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
-  { id: '2', title: 'Makossa Feelings', description: 'Upbeat and vibrant track', coverArt: 'https://picsum.photos/seed/song2/100/100', src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
-  { id: '3', title: 'Bikutsi Night', description: 'Energetic dance rhythm', coverArt: 'https://picsum.photos/seed/song3/100/100', src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
-  { id: '4', title: 'Douala Dream', description: 'Chill afrobeat vibe', coverArt: 'https://picsum.photos/seed/song4/100/100', src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3' },
-];
+import { BellIcon, FilterIcon } from '../components/icons';
+import SongItem from '../components/SongItem';
 
 const promoSlides = [
     {
@@ -19,7 +12,7 @@ const promoSlides = [
         description: 'Promote your new songs and get quality insights from your listeners',
         bgColor: 'bg-brand-green',
         textColor: 'text-black',
-        img: 'https://i.imgur.com/gAY931j.png', // Placeholder image URL
+        img: 'https://i.imgur.com/gAY931j.png',
     },
     {
         id: 'creator',
@@ -28,16 +21,17 @@ const promoSlides = [
         description: 'Promote your new songs and get quality insights from your listeners',
         bgColor: 'bg-brand-pink',
         textColor: 'text-white',
-        img: 'https://i.imgur.com/gAY931j.png', // Placeholder image URL
+        img: 'https://i.imgur.com/gAY931j.png',
     }
 ];
 
 interface HomePageProps {
+  songs: Song[];
   playSong: (song: Song) => void;
   setActivePage: (page: Page) => void;
+  openOptions: (song: Song) => void;
 }
 
-// Optimized: Component defined outside to prevent re-creation on render
 const Header: React.FC = () => (
     <div className="flex justify-between items-center p-4">
         <div className="flex items-center space-x-3">
@@ -54,21 +48,6 @@ const Header: React.FC = () => (
     </div>
 );
 
-// Optimized: Component defined outside
-const SongItem: React.FC<{ song: Song; onPlay: (song: Song) => void }> = ({ song, onPlay }) => (
-    <button onClick={() => onPlay(song)} className="w-full flex items-center space-x-4 p-2 rounded-lg hover:bg-brand-card/50 text-left">
-        <img src={song.coverArt} alt={song.title} className="w-14 h-14 rounded-md flex-shrink-0" />
-        <div className="flex-grow min-w-0">
-            <h3 className="font-bold text-white truncate">{song.title}</h3>
-            <p className="text-sm text-brand-light-gray truncate">{song.description}</p>
-        </div>
-        <div className="text-brand-light-gray">
-            <MoreIcon className="h-6 w-6"/>
-        </div>
-    </button>
-);
-
-// Optimized: Component defined outside
 const PromoCarousel: React.FC<{ setActivePage: (page: Page) => void }> = ({ setActivePage }) => {
     const [index, setIndex] = useState(0);
 
@@ -80,19 +59,13 @@ const PromoCarousel: React.FC<{ setActivePage: (page: Page) => void }> = ({ setA
     }, []);
 
     const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-        const dragThreshold = 50;
-        if (info.offset.x > dragThreshold) {
-            setIndex(prev => (prev - 1 + promoSlides.length) % promoSlides.length);
-        } else if (info.offset.x < -dragThreshold) {
-            setIndex(prev => (prev + 1) % promoSlides.length);
-        }
+        if (info.offset.x > 50) setIndex(p => (p - 1 + promoSlides.length) % promoSlides.length);
+        else if (info.offset.x < -50) setIndex(p => (p + 1) % promoSlides.length);
     };
     
     const handleClick = (slideId: string) => {
-        if(slideId === 'creator') {
-            setActivePage(Page.Create);
-        }
-        // Can add logic for 'promo' later
+        if(slideId === 'creator') setActivePage(Page.Create);
+        if(slideId === 'promo') setActivePage(Page.Campaign);
     }
 
     return (
@@ -132,7 +105,7 @@ const PromoCarousel: React.FC<{ setActivePage: (page: Page) => void }> = ({ setA
     );
 }
 
-const HomePage: React.FC<HomePageProps> = ({ playSong, setActivePage }) => {
+const HomePage: React.FC<HomePageProps> = ({ songs, playSong, setActivePage, openOptions }) => {
     return (
         <div className="min-h-screen" style={{ background: 'radial-gradient(circle at top, #1DB95430, #0A0F0D 50%)' }}>
             <Header />
@@ -141,14 +114,24 @@ const HomePage: React.FC<HomePageProps> = ({ playSong, setActivePage }) => {
                 
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-2xl font-bold text-white">My Songs</h2>
-                    <button className="flex items-center space-x-2 text-brand-light-gray hover:text-white">
+                    <button onClick={() => setActivePage(Page.Create)} className="flex items-center space-x-2 text-brand-light-gray hover:text-white">
                         <span>Filter</span>
                         <FilterIcon className="h-5 w-5"/>
                     </button>
                 </div>
 
                 <div className="space-y-2">
-                    {mockSongs.map(song => <SongItem key={song.id} song={song} onPlay={playSong} />)}
+                    {songs.length > 0 ? (
+                        songs.map(song => 
+                            <SongItem 
+                                key={song.id} 
+                                song={song} 
+                                onPlay={playSong} 
+                                onOpenOptions={openOptions} 
+                            />)
+                    ) : (
+                        <p className="text-brand-gray text-center py-8">Your song library is empty. Go to the 'Create' page to make some music!</p>
+                    )}
                 </div>
             </div>
         </div>
