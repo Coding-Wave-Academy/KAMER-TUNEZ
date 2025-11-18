@@ -1,0 +1,19 @@
+
+export enum Page {
+  Home = 'Home',
+  Create = 'Create',
+  Stats = 'Stats',
+  Profile = 'Profile',
+}
+
+export interface Song {
+  id: string;
+  title: string;
+  description: string;
+  coverArt: string;
+}
+
+export interface ChartData {
+  name: string;
+  value: number;
+}
