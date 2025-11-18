@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { Page } from './types';
+import { Page, Song } from './types';
 import BottomNav from './components/BottomNav';
+import MiniPlayer from './components/MiniPlayer';
 import HomePage from './pages/HomePage';
 import CreatePage from './pages/CreatePage';
 import StatsPage from './pages/StatsPage';
@@ -9,19 +10,31 @@ import ProfilePage from './pages/ProfilePage';
 
 const App: React.FC = () => {
   const [activePage, setActivePage] = useState<Page>(Page.Create);
+  const [currentSong, setCurrentSong] = useState<Song | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const handlePlaySong = (song: Song) => {
+    setCurrentSong(song);
+    setIsPlaying(true);
+  };
+
+  const handleTogglePlay = () => {
+    setIsPlaying(prev => !prev);
+  }
 
   const renderPage = () => {
+    const props = { playSong: handlePlaySong };
     switch (activePage) {
       case Page.Home:
-        return <HomePage />;
+        return <HomePage {...props} />;
       case Page.Create:
-        return <CreatePage />;
+        return <CreatePage {...props} />;
       case Page.Stats:
         return <StatsPage />;
       case Page.Profile:
         return <ProfilePage />;
       default:
-        return <CreatePage />;
+        return <CreatePage {...props} />;
     }
   };
 
@@ -29,9 +42,16 @@ const App: React.FC = () => {
     <>
       <div className="md:hidden">
         <div className="bg-brand-dark min-h-screen text-white font-sans">
-          <main className="pb-24">
+          <main className={`pb-24 ${currentSong ? 'pb-44' : ''}`}>
             {renderPage()}
           </main>
+          {currentSong && (
+             <MiniPlayer 
+                song={currentSong} 
+                isPlaying={isPlaying} 
+                onTogglePlay={handleTogglePlay}
+             />
+          )}
           <BottomNav activePage={activePage} setActivePage={setActivePage} />
         </div>
       </div>

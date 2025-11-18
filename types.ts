@@ -11,6 +11,7 @@ export interface Song {
   title: string;
   description: string;
   coverArt: string;
+  src: string;
 }
 
 export interface ChartData {

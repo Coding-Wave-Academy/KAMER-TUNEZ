@@ -7,11 +7,15 @@ import UploadSongModal from '../components/UploadSongModal';
 
 
 const mockSongs: Song[] = [
-  { id: '1', title: 'Life in the Ghetto', description: 'Describe the style of your song', coverArt: 'https://picsum.photos/seed/song1/100/100' },
-  { id: '2', title: 'Makossa Feelings', description: 'Upbeat and vibrant track', coverArt: 'https://picsum.photos/seed/song2/100/100' },
-  { id: '3', title: 'Bikutsi Night', description: 'Energetic dance rhythm', coverArt: 'https://picsum.photos/seed/song3/100/100' },
-  { id: '4', title: 'Douala Dream', description: 'Chill afrobeat vibe', coverArt: 'https://picsum.photos/seed/song4/100/100' },
+  { id: '1', title: 'Life in the Ghetto', description: 'Describe the style of your song', coverArt: 'https://picsum.photos/seed/song1/100/100', src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
+  { id: '2', title: 'Makossa Feelings', description: 'Upbeat and vibrant track', coverArt: 'https://picsum.photos/seed/song2/100/100', src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
+  { id: '3', title: 'Bikutsi Night', description: 'Energetic dance rhythm', coverArt: 'https://picsum.photos/seed/song3/100/100', src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
+  { id: '4', title: 'Douala Dream', description: 'Chill afrobeat vibe', coverArt: 'https://picsum.photos/seed/song4/100/100', src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3' },
 ];
+
+interface HomePageProps {
+  playSong: (song: Song) => void;
+}
 
 const Header: React.FC = () => (
     <div className="flex justify-between items-center p-4">
@@ -25,20 +29,20 @@ const Header: React.FC = () => (
     </div>
 );
 
-const SongItem: React.FC<{ song: Song }> = ({ song }) => (
-    <div className="flex items-center space-x-4 p-2 rounded-lg hover:bg-brand-card/50">
-        <img src={song.coverArt} alt={song.title} className="w-14 h-14 rounded-md" />
-        <div className="flex-grow">
-            <h3 className="font-bold text-white">{song.title}</h3>
-            <p className="text-sm text-brand-light-gray">{song.description}</p>
+const SongItem: React.FC<{ song: Song; onPlay: (song: Song) => void }> = ({ song, onPlay }) => (
+    <button onClick={() => onPlay(song)} className="w-full flex items-center space-x-4 p-2 rounded-lg hover:bg-brand-card/50 text-left">
+        <img src={song.coverArt} alt={song.title} className="w-14 h-14 rounded-md flex-shrink-0" />
+        <div className="flex-grow min-w-0">
+            <h3 className="font-bold text-white truncate">{song.title}</h3>
+            <p className="text-sm text-brand-light-gray truncate">{song.description}</p>
         </div>
-        <button className="text-brand-light-gray">
+        <div className="text-brand-light-gray">
             <MoreIcon className="h-6 w-6"/>
-        </button>
-    </div>
+        </div>
+    </button>
 );
 
-const HomePage: React.FC = () => {
+const HomePage: React.FC<HomePageProps> = ({ playSong }) => {
     const [isUploadModalOpen, setUploadModalOpen] = useState(false);
 
     return (
@@ -77,7 +81,7 @@ const HomePage: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                    {mockSongs.map(song => <SongItem key={song.id} song={song} />)}
+                    {mockSongs.map(song => <SongItem key={song.id} song={song} onPlay={playSong} />)}
                 </div>
             </div>
             <AnimatePresence>

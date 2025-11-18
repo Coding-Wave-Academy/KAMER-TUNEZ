@@ -15,12 +15,13 @@ const mockStreams: ChartData[] = [
 ];
 
 const mockDemographics: ChartData[] = [
-  { name: 'Cameroon', value: 400 },
-  { name: 'Nigeria', value: 300 },
-  { name: 'France', value: 200 },
-  { name: 'USA', value: 100 },
+  { name: 'Littoral', value: 450 },
+  { name: 'Centre', value: 380 },
+  { name: 'West', value: 200 },
+  { name: 'North West', value: 150 },
+  { name: 'Other', value: 80 },
 ];
-const COLORS = ['#1ED760', '#1DB954', '#158c42', '#0d5d2a'];
+const COLORS = ['#1ED760', '#1DB954', '#158c42', '#0d5d2a', '#083b1b'];
 
 
 const StatsPage: React.FC = () => {
@@ -31,24 +32,24 @@ const StatsPage: React.FC = () => {
         setIsLoadingInsights(true);
         const dataSummary = {
             weeklyStreams: mockStreams.reduce((acc, cur) => acc + cur.value, 0),
-            topCountry: mockDemographics[0].name,
+            topRegion: mockDemographics[0].name,
             streamsData: mockStreams,
             demographicsData: mockDemographics
         };
         const prompt = `
-            As an expert music industry analyst for a Cameroonian artist, analyze the following data and provide actionable insights.
+            As an expert music industry analyst for a Cameroonian artist, analyze the following data focusing on performance within Cameroon and provide actionable insights.
             The response should be concise, mobile-friendly, and use markdown for formatting (bolding, lists).
 
             Data:
             - Total weekly streams: ${dataSummary.weeklyStreams}
-            - Top listening country: ${dataSummary.topCountry}
+            - Top listening region in Cameroon: ${dataSummary.topRegion}
             - Daily streams breakdown: ${JSON.stringify(dataSummary.streamsData)}
-            - Listener demographics by country: ${JSON.stringify(dataSummary.demographicsData)}
+            - Listener demographics by region in Cameroon: ${JSON.stringify(dataSummary.demographicsData)}
 
             Provide:
-            1.  **Summary**: A quick overview of the week's performance.
-            2.  **Key Insights**: 2-3 bullet points on what the data means (e.g., peak days, audience concentration).
-            3.  **Growth Plan**: 2-3 actionable suggestions for the artist to grow their audience based on this data.
+            1.  **Summary**: A quick overview of the week's performance in Cameroon.
+            2.  **Key Insights**: 2-3 bullet points on what the data means (e.g., peak days, regional audience concentration).
+            3.  **Growth Plan**: 2-3 actionable suggestions for the artist to grow their audience within Cameroon based on this data. (e.g., target promotions in specific regions, collaborate with artists from those regions).
         `;
 
         try {
@@ -86,15 +87,16 @@ const StatsPage: React.FC = () => {
             </div>
 
             <div className="bg-brand-card p-4 rounded-xl mb-6">
-                <h2 className="font-bold text-white mb-2">Listener Demographics</h2>
+                <h2 className="font-bold text-white mb-2">Cameroon Demographics</h2>
                 <div style={{ width: '100%', height: 200 }}>
                     <ResponsiveContainer>
                         <PieChart>
-                             <Pie data={mockDemographics} cx="50%" cy="50%" outerRadius={80} fill="#8884d8" dataKey="value" labelLine={false} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                             <Pie data={mockDemographics} cx="50%" cy="50%" outerRadius={80} fill="#8884d8" dataKey="value" labelLine={false} label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}>
                                 {mockDemographics.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                             </Pie>
+                             <Legend formatter={(value, entry) => <span className="text-brand-light-gray text-xs">{value}</span>} />
                             <Tooltip contentStyle={{ backgroundColor: '#1A221F', border: 'none', borderRadius: '8px' }}/>
                         </PieChart>
                     </ResponsiveContainer>
