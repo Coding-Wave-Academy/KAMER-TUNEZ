@@ -81,8 +81,9 @@ const PromoCarousel: React.FC<{ setActivePage: (page: Page) => void }> = ({ setA
     const handleClick = (slideId: string) => {
         if(slideId === 'creator') {
             setActivePage(Page.Create);
+        } else if (slideId === 'promo') {
+            setActivePage(Page.Campaign);
         }
-        // Can add logic for 'promo' later
     }
 
     return (

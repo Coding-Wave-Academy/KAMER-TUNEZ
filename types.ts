@@ -4,6 +4,7 @@ export enum Page {
   Create = 'Create',
   Stats = 'Stats',
   Profile = 'Profile',
+  Campaign = 'Campaign',
 }
 
 export interface Song {

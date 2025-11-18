@@ -20,6 +20,8 @@ type CreateView = 'hub' | 'ai_creation';
 interface CreatePageProps {
   playSong: (song: Song) => void;
   setActivePage: (page: Page) => void;
+  generationCredits: number;
+  onUseCredit: () => void;
 }
 
 const SongItem: React.FC<{ song: Song; onPlay: (song: Song) => void }> = ({ song, onPlay }) => (
@@ -36,7 +38,12 @@ const SongItem: React.FC<{ song: Song; onPlay: (song: Song) => void }> = ({ song
 );
 
 
-const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => void }> = ({ onBack, playSong }) => {
+const AICreationView: React.FC<{ 
+    onBack: () => void; 
+    playSong: (song: Song) => void;
+    generationCredits: number;
+    onUseCredit: () => void;
+}> = ({ onBack, playSong, generationCredits, onUseCredit }) => {
     const [mode, setMode] = useState<Mode>('Lyrics');
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -114,6 +121,10 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
     };
 
     const handleGenerateMusic = async () => {
+        if (generationCredits <= 0) {
+            alert("You've reached your daily generation limit. Please upgrade or try again tomorrow.");
+            return;
+        }
         setIsGenerating(true);
         setGeneratedSong(null);
         
@@ -125,6 +136,8 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
         const artPrompt = `Vibrant, abstract album cover for a song titled "${title}" described as "${description}". Modern Cameroonian art style.`;
         setCoverPrompt(artPrompt);
         const coverArtUrl = await generateCoverArt(artPrompt);
+        
+        onUseCredit(); // Decrement credit after successful generation
 
         setGeneratedSong({
             id: Date.now().toString(),
@@ -146,6 +159,8 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
          setIsEditingCover(false);
     }
 
+    const hasNoCredits = generationCredits <= 0;
+
     return (
         <motion.div 
             initial={{ x: '100%' }}
@@ -155,11 +170,16 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
             className="absolute inset-0 bg-brand-dark z-10 overflow-y-auto"
             style={{ background: 'radial-gradient(circle at top, #B91D7330, #0A0F0D 50%)' }}
         >
-             <div className="flex items-center p-4">
-                <button onClick={onBack} className="mr-4 text-white">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                </button>
-                <h2 className="text-xl font-bold">Create with AI</h2>
+             <div className="flex items-center justify-between p-4">
+                <div className="flex items-center">
+                    <button onClick={onBack} className="mr-4 text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                    </button>
+                    <h2 className="text-xl font-bold">Create with AI</h2>
+                </div>
+                <div className="text-sm font-semibold bg-white/10 px-3 py-1 rounded-full">
+                    Credits: <span className="font-bold text-brand-green">{generationCredits}</span>
+                </div>
             </div>
              <div className="p-4 pb-40">
                  {isGenerating && (
@@ -193,6 +213,12 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
 
                 {!isGenerating && !generatedSong && (
                     <>
+                        {hasNoCredits && (
+                            <div className="bg-red-500/20 border border-red-500 text-red-300 text-center p-3 rounded-lg mb-6">
+                                <p className="font-bold">Daily Limit Reached</p>
+                                <p className="text-sm">Upgrade to a premium plan for more generations or check back tomorrow.</p>
+                            </div>
+                        )}
                         <div className="bg-brand-card p-1 rounded-full flex items-center max-w-sm mx-auto mb-8">
                             <button onClick={() => setMode('Instrumental')} className={`w-1/2 py-2 rounded-full text-sm font-bold transition-colors ${mode === 'Instrumental' ? 'bg-brand-pink text-white' : 'text-brand-light-gray'}`}>Instrumental</button>
                             <button onClick={() => setMode('Lyrics')} className={`w-1/2 py-2 rounded-full text-sm font-bold transition-colors ${mode === 'Lyrics' ? 'bg-brand-pink text-white' : 'text-brand-light-gray'}`}>Lyrics</button>
@@ -224,8 +250,8 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
 
             {!generatedSong && (
                 <div className="absolute bottom-0 left-0 right-0 p-4 bg-brand-dark/80 backdrop-blur-sm border-t border-brand-gray/20">
-                    <button onClick={handleGenerateMusic} disabled={isGenerating || isLoadingText || !title} className="w-full bg-brand-pink text-white font-bold py-4 rounded-full text-lg disabled:bg-brand-gray disabled:cursor-not-allowed">
-                        {isGenerating ? 'Generating...' : 'Generate'}
+                    <button onClick={handleGenerateMusic} disabled={isGenerating || isLoadingText || !title || hasNoCredits} className="w-full bg-brand-pink text-white font-bold py-4 rounded-full text-lg disabled:bg-brand-gray disabled:cursor-not-allowed">
+                        {isGenerating ? 'Generating...' : (hasNoCredits ? 'Daily Limit Reached' : 'Generate')}
                     </button>
                 </div>
             )}
@@ -248,12 +274,12 @@ const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => v
     );
 }
 
-const CreatePage: React.FC<CreatePageProps> = ({ playSong, setActivePage }) => {
+const CreatePage: React.FC<CreatePageProps> = ({ playSong, setActivePage, generationCredits, onUseCredit }) => {
     const [view, setView] = useState<CreateView>('hub');
     const [isUploadModalOpen, setUploadModalOpen] = useState(false);
 
     if (view === 'ai_creation') {
-        return <AICreationView onBack={() => setView('hub')} playSong={playSong} />;
+        return <AICreationView onBack={() => setView('hub')} playSong={playSong} generationCredits={generationCredits} onUseCredit={onUseCredit} />;
     }
 
     return (

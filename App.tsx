@@ -9,12 +9,16 @@ import HomePage from './pages/HomePage';
 import CreatePage from './pages/CreatePage';
 import StatsPage from './pages/StatsPage';
 import ProfilePage from './pages/ProfilePage';
+import CampaignPage from './pages/CampaignPage';
+
+const DAILY_GENERATION_LIMIT = 5;
 
 const App: React.FC = () => {
   const [activePage, setActivePage] = useState<Page>(Page.Home);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isFullScreenPlayerOpen, setFullScreenPlayerOpen] = useState(false);
+  const [generationCredits, setGenerationCredits] = useState(DAILY_GENERATION_LIMIT);
 
   const handlePlaySong = (song: Song) => {
     setCurrentSong(song);
@@ -25,6 +29,10 @@ const App: React.FC = () => {
     if (!currentSong) return;
     setIsPlaying(prev => !prev);
   }
+  
+  const handleUseCredit = () => {
+    setGenerationCredits(prev => Math.max(0, prev - 1));
+  }
 
   const handleClosePlayer = () => {
     setIsPlaying(false);
@@ -33,18 +41,19 @@ const App: React.FC = () => {
   }
 
   const renderPage = () => {
-    const props = { playSong: handlePlaySong, setActivePage };
     switch (activePage) {
       case Page.Home:
-        return <HomePage {...props} />;
+        return <HomePage playSong={handlePlaySong} setActivePage={setActivePage} />;
       case Page.Create:
-        return <CreatePage {...props} />;
+        return <CreatePage playSong={handlePlaySong} setActivePage={setActivePage} generationCredits={generationCredits} onUseCredit={handleUseCredit} />;
       case Page.Stats:
         return <StatsPage />;
       case Page.Profile:
         return <ProfilePage />;
+      case Page.Campaign:
+         return <CampaignPage setActivePage={setActivePage} />;
       default:
-        return <HomePage {...props} />;
+        return <HomePage playSong={handlePlaySong} setActivePage={setActivePage} />;
     }
   };
 
