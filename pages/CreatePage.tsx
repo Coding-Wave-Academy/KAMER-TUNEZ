@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Song, Page, FilterType } from '../types';
@@ -8,7 +9,7 @@ import FilterModal from '../components/FilterModal';
 import SongItem from '../components/SongItem';
 import { GoogleGenAI, Modality } from '@google/genai';
 import { generateMusic } from '../services/kieApi';
-import { generateLyrics } from '../services/deepseekApi';
+import { generateLyrics, generateDescription } from '../services/deepseekApi';
 import * as env from '../services/env';
 
 interface CreatePageProps {
@@ -65,42 +66,32 @@ const AICreationView: React.FC<{
     };
 
     const generateWithAI = useCallback(async (field: 'description' | 'lyrics') => {
-        if (field === 'lyrics') {
-            setIsLoadingText(true);
-            try {
+        setIsLoadingText(true);
+        try {
+            if (field === 'lyrics') {
                 const generated = await generateLyrics(description || `a Cameroonian ${mode.toLowerCase()} song`);
                 setLyrics(generated);
-            } catch (error) {
-                console.error("Error generating lyrics:", error);
-                alert("Failed to generate lyrics.");
-            } finally {
-                setIsLoadingText(false);
-            }
-        } else {
-             const ai = getAiClient();
-             if (!ai) { alert("Gemini API key is not configured."); return; }
-             setIsLoadingText(true);
-             try {
+            } else {
+                 // Use DeepSeek for description generation
                  const prompt = `Generate a short, vibrant song description for a Cameroonian song titled "${title || 'Untitled'}".`;
-                 const response = await ai.models.generateContent({model: 'gemini-2.5-flash', contents: prompt });
-                 setDescription(response.text.trim().replace(/^"|"$/g, ''));
-             } catch (error) {
-                 console.error("Error generating description:", error);
-                 alert("Failed to generate description.");
-             } finally {
-                 setIsLoadingText(false);
-             }
+                 const generatedDesc = await generateDescription(prompt);
+                 setDescription(generatedDesc);
+            }
+        } catch (error) {
+             console.error(`Error generating ${field}:`, error);
+             alert(`Failed to generate ${field}.`);
+        } finally {
+             setIsLoadingText(false);
         }
     }, [title, description, mode]);
     
     const handleGenreSelect = async (genre: string) => {
-        const ai = getAiClient();
-        if (!ai) { alert("Gemini API key is not configured."); return; }
         setIsLoadingText(true);
         try {
+            // Use DeepSeek for genre-based description
             const prompt = `Generate a one-sentence, evocative musical style description for a song in the Cameroonian genre of "${genre}".`;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-            setDescription(response.text.trim());
+            const generatedDesc = await generateDescription(prompt);
+            setDescription(generatedDesc);
         } catch (error) {
             console.error("Error generating genre description:", error);
         } finally {
@@ -172,14 +163,15 @@ const AICreationView: React.FC<{
         const mixedAudioUrl = URL.createObjectURL(mixedAudioBlob);
         const newSongData = {
             ...generatedSong,
-            title: `${generatedSong.title} (Vocal Mix)`,
+            title: `${generatedSong.title} (Mastered)`,
             src: mixedAudioUrl,
             origin: 'mixed' as const,
+            description: `Remixed version of ${generatedSong.title} with vocals.`
         };
         await onSongAdded(newSongData);
         setVoiceEditorOpen(false);
         resetForm();
-        alert("Vocal mix saved successfully!");
+        alert("Masterpiece saved! Check 'My Songs' to listen to your new mix.");
     };
 
 
@@ -229,9 +221,12 @@ const AICreationView: React.FC<{
                                 <EditIcon className="w-5 h-5"/>
                             </button>
                         </div>
-                        <audio controls src={generatedSong.src} className="w-full"></audio>
+                        <audio controls src={generatedSong.src} className="w-full rounded-lg"></audio>
                          <div className="space-y-4 mt-6">
-                             <button onClick={() => setVoiceEditorOpen(true)} className="w-full bg-brand-pink text-white py-3 rounded-full font-bold">Add Vocals & Edit</button>
+                             <button onClick={() => setVoiceEditorOpen(true)} className="w-full bg-brand-pink text-white py-3 rounded-full font-bold flex items-center justify-center space-x-2 shadow-lg shadow-brand-pink/30">
+                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" /></svg>
+                                 <span>Record Vocals & Mix</span>
+                             </button>
                             <div className="flex items-center space-x-4">
                                <button onClick={resetForm} className="w-full bg-brand-gray py-3 rounded-full font-bold">Create More</button>
                                <button onClick={() => playSong(generatedSong)} className="w-full bg-brand-green text-black py-3 rounded-full font-bold">Play Song</button>

@@ -1,4 +1,6 @@
 
+import * as env from './env';
+
 // This file simulates the Kie AI Music API for cost-effective music generation.
 // In a real application, this would make HTTP requests to the actual API endpoints.
 
@@ -17,6 +19,13 @@ interface GenerateMusicParams {
 export const generateMusic = async ({ prompt, durationInSeconds = 180 }: GenerateMusicParams): Promise<string> => {
     console.log(`[Kie API] Request to generate music for prompt: "${prompt}"`);
     console.log(`[Kie API] Duration limit: ${Math.min(durationInSeconds, 240)}s`);
+
+    if (!env.KIE_AI_API_KEY || env.KIE_AI_API_KEY === "YOUR_KIE_AI_API_KEY_HERE") {
+        console.warn("[Kie API] No API Key found. Using mock generation.");
+    } else {
+        console.log("[Kie API] Using API Key for generation.");
+        // In a real app: Authorization: `Bearer ${env.KIE_AI_API_KEY}`
+    }
 
     // Simulate network delay and processing time (e.g., 3-5 seconds)
     const delay = 3000 + Math.random() * 2000;
