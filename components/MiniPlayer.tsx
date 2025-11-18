@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Song } from '../types';
 import { PreviousIcon, NextIcon, PlayCircleIcon, PauseCircleIcon } from './icons';
@@ -10,44 +10,12 @@ interface MiniPlayerProps {
     onTogglePlay: () => void;
     onClose: () => void;
     onOpenFullScreen: () => void;
+    currentTime: number;
+    duration: number;
 }
 
-const MiniPlayer: React.FC<MiniPlayerProps> = ({ song, isPlaying, onTogglePlay, onClose, onOpenFullScreen }) => {
-    const audioRef = useRef<HTMLAudioElement>(null);
-    const [progress, setProgress] = useState(0);
-
-    useEffect(() => {
-        const audio = audioRef.current;
-        if (!audio) return;
-
-        const updateProgress = () => {
-            if (audio.duration > 0) {
-                 setProgress((audio.currentTime / audio.duration) * 100);
-            }
-        };
-
-        const handleEnded = () => {
-            if (isPlaying) onTogglePlay();
-        };
-
-        audio.addEventListener('timeupdate', updateProgress);
-        audio.addEventListener('ended', handleEnded);
-
-        return () => {
-            audio.removeEventListener('timeupdate', updateProgress);
-            audio.removeEventListener('ended', handleEnded);
-        };
-    }, [isPlaying, onTogglePlay]);
-
-    useEffect(() => {
-        if (isPlaying) {
-            audioRef.current?.play().catch(e => console.error("Playback error:", e));
-        } else {
-            audioRef.current?.pause();
-        }
-    }, [isPlaying, song.src]);
-    
-    const audioKey = song.id;
+const MiniPlayer: React.FC<MiniPlayerProps> = ({ song, isPlaying, onTogglePlay, onClose, onOpenFullScreen, currentTime, duration }) => {
+    const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
     return (
         <motion.div 
@@ -60,11 +28,14 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({ song, isPlaying, onTogglePlay, 
             <div className="bg-brand-card/90 backdrop-blur-md rounded-lg p-2 flex items-center space-x-3 relative overflow-hidden">
                  <div className="absolute bottom-0 left-0 h-0.5 bg-brand-pink" style={{ width: `${progress}%` }}></div>
                 <div className="absolute bottom-0 h-0.5 bg-brand-gray/50" style={{ left: `${progress}%`, right: 0 }}></div>
-
-                <audio ref={audioRef} src={song.src} key={audioKey} preload="auto" />
                 
-                <div className="flex-grow flex items-center space-x-3 min-w-0" onClick={onOpenFullScreen}>
-                    <img src={song.coverArt} alt={song.title} className="w-12 h-12 rounded-md flex-shrink-0" />
+                <div className="flex-grow flex items-center space-x-3 min-w-0 cursor-pointer" onClick={onOpenFullScreen}>
+                    <motion.img 
+                        layoutId={song.layoutId}
+                        src={song.coverArt} 
+                        alt={song.title} 
+                        className="w-12 h-12 rounded-md flex-shrink-0" 
+                    />
                     <div className="flex-grow min-w-0">
                         <p className="text-white font-bold truncate">{song.title}</p>
                     </div>

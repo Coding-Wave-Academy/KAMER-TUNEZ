@@ -2,7 +2,7 @@
 import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Song, Page } from '../types';
-import { BellIcon, EditIcon, UploadIcon, CreateWithAIIcon, MoreIcon, FilterIcon } from '../components/icons';
+import { EditIcon, UploadIcon, CreateWithAIIcon, MoreIcon, FilterIcon } from '../components/icons';
 import UploadSongModal from '../components/UploadSongModal';
 import AudioPlayer from '../components/AudioPlayer';
 import { GoogleGenAI, Modality } from '@google/genai';
@@ -20,10 +20,9 @@ type CreateView = 'hub' | 'ai_creation';
 interface CreatePageProps {
   playSong: (song: Song) => void;
   setActivePage: (page: Page) => void;
-  generationCredits: number;
-  onUseCredit: () => void;
 }
 
+// Optimized: Component defined outside
 const SongItem: React.FC<{ song: Song; onPlay: (song: Song) => void }> = ({ song, onPlay }) => (
     <button onClick={() => onPlay(song)} className="w-full flex items-center space-x-4 p-2 rounded-lg hover:bg-brand-card/50 text-left">
         <img src={song.coverArt} alt={song.title} className="w-14 h-14 rounded-md flex-shrink-0" />
@@ -37,13 +36,17 @@ const SongItem: React.FC<{ song: Song; onPlay: (song: Song) => void }> = ({ song
     </button>
 );
 
+// Helper function to safely get AI client
+const getAiClient = (): GoogleGenAI | null => {
+    if (!process.env.API_KEY) {
+        alert("Gemini API key is not configured. AI features are disabled.");
+        return null;
+    }
+    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+};
 
-const AICreationView: React.FC<{ 
-    onBack: () => void; 
-    playSong: (song: Song) => void;
-    generationCredits: number;
-    onUseCredit: () => void;
-}> = ({ onBack, playSong, generationCredits, onUseCredit }) => {
+// Optimized: Component defined outside
+const AICreationView: React.FC<{ onBack: () => void; playSong: (song: Song) => void }> = ({ onBack, playSong }) => {
     const [mode, setMode] = useState<Mode>('Lyrics');
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -62,9 +65,11 @@ const AICreationView: React.FC<{
     };
 
      const generateWithAI = useCallback(async (field: 'description' | 'lyrics') => {
+        const ai = getAiClient();
+        if (!ai) return;
+        
         setIsLoadingText(true);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
             let prompt = '';
             if (field === 'description') {
                 prompt = `Generate a short, vibrant song description for a Cameroonian song titled "${title || 'Untitled'}".`;
@@ -87,9 +92,11 @@ const AICreationView: React.FC<{
     }, [title, description]);
 
     const handleGenreSelect = async (genre: string) => {
+        const ai = getAiClient();
+        if (!ai) return;
+
         setIsLoadingText(true);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
             const prompt = `Generate a one-sentence, evocative musical style description for a song in the Cameroonian genre of "${genre}".`;
             const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
             setDescription(response.text.trim());
@@ -101,8 +108,10 @@ const AICreationView: React.FC<{
     };
     
     const generateCoverArt = async (artPrompt: string) => {
+        const ai = getAiClient();
+        if (!ai) return 'https://picsum.photos/seed/no-api-key/512/512';
+
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash-image',
                 contents: { parts: [{ text: artPrompt }] },
@@ -121,10 +130,6 @@ const AICreationView: React.FC<{
     };
 
     const handleGenerateMusic = async () => {
-        if (generationCredits <= 0) {
-            alert("You've reached your daily generation limit. Please upgrade or try again tomorrow.");
-            return;
-        }
         setIsGenerating(true);
         setGeneratedSong(null);
         
@@ -136,8 +141,6 @@ const AICreationView: React.FC<{
         const artPrompt = `Vibrant, abstract album cover for a song titled "${title}" described as "${description}". Modern Cameroonian art style.`;
         setCoverPrompt(artPrompt);
         const coverArtUrl = await generateCoverArt(artPrompt);
-        
-        onUseCredit(); // Decrement credit after successful generation
 
         setGeneratedSong({
             id: Date.now().toString(),
@@ -159,8 +162,6 @@ const AICreationView: React.FC<{
          setIsEditingCover(false);
     }
 
-    const hasNoCredits = generationCredits <= 0;
-
     return (
         <motion.div 
             initial={{ x: '100%' }}
@@ -170,16 +171,11 @@ const AICreationView: React.FC<{
             className="absolute inset-0 bg-brand-dark z-10 overflow-y-auto"
             style={{ background: 'radial-gradient(circle at top, #B91D7330, #0A0F0D 50%)' }}
         >
-             <div className="flex items-center justify-between p-4">
-                <div className="flex items-center">
-                    <button onClick={onBack} className="mr-4 text-white">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                    </button>
-                    <h2 className="text-xl font-bold">Create with AI</h2>
-                </div>
-                <div className="text-sm font-semibold bg-white/10 px-3 py-1 rounded-full">
-                    Credits: <span className="font-bold text-brand-green">{generationCredits}</span>
-                </div>
+             <div className="flex items-center p-4">
+                <button onClick={onBack} className="mr-4 text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <h2 className="text-xl font-bold">Create with AI</h2>
             </div>
              <div className="p-4 pb-40">
                  {isGenerating && (
@@ -213,12 +209,6 @@ const AICreationView: React.FC<{
 
                 {!isGenerating && !generatedSong && (
                     <>
-                        {hasNoCredits && (
-                            <div className="bg-red-500/20 border border-red-500 text-red-300 text-center p-3 rounded-lg mb-6">
-                                <p className="font-bold">Daily Limit Reached</p>
-                                <p className="text-sm">Upgrade to a premium plan for more generations or check back tomorrow.</p>
-                            </div>
-                        )}
                         <div className="bg-brand-card p-1 rounded-full flex items-center max-w-sm mx-auto mb-8">
                             <button onClick={() => setMode('Instrumental')} className={`w-1/2 py-2 rounded-full text-sm font-bold transition-colors ${mode === 'Instrumental' ? 'bg-brand-pink text-white' : 'text-brand-light-gray'}`}>Instrumental</button>
                             <button onClick={() => setMode('Lyrics')} className={`w-1/2 py-2 rounded-full text-sm font-bold transition-colors ${mode === 'Lyrics' ? 'bg-brand-pink text-white' : 'text-brand-light-gray'}`}>Lyrics</button>
@@ -250,8 +240,8 @@ const AICreationView: React.FC<{
 
             {!generatedSong && (
                 <div className="absolute bottom-0 left-0 right-0 p-4 bg-brand-dark/80 backdrop-blur-sm border-t border-brand-gray/20">
-                    <button onClick={handleGenerateMusic} disabled={isGenerating || isLoadingText || !title || hasNoCredits} className="w-full bg-brand-pink text-white font-bold py-4 rounded-full text-lg disabled:bg-brand-gray disabled:cursor-not-allowed">
-                        {isGenerating ? 'Generating...' : (hasNoCredits ? 'Daily Limit Reached' : 'Generate')}
+                    <button onClick={handleGenerateMusic} disabled={isGenerating || isLoadingText || !title} className="w-full bg-brand-pink text-white font-bold py-4 rounded-full text-lg disabled:bg-brand-gray disabled:cursor-not-allowed">
+                        {isGenerating ? 'Generating...' : 'Generate'}
                     </button>
                 </div>
             )}
@@ -274,12 +264,12 @@ const AICreationView: React.FC<{
     );
 }
 
-const CreatePage: React.FC<CreatePageProps> = ({ playSong, setActivePage, generationCredits, onUseCredit }) => {
+const CreatePage: React.FC<CreatePageProps> = ({ playSong, setActivePage }) => {
     const [view, setView] = useState<CreateView>('hub');
     const [isUploadModalOpen, setUploadModalOpen] = useState(false);
 
     if (view === 'ai_creation') {
-        return <AICreationView onBack={() => setView('hub')} playSong={playSong} generationCredits={generationCredits} onUseCredit={onUseCredit} />;
+        return <AICreationView onBack={() => setView('hub')} playSong={playSong} />;
     }
 
     return (

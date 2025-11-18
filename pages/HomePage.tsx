@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { motion, PanInfo } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { motion, PanInfo, useAnimation } from 'framer-motion';
 import { Song, Page } from '../types';
 import { BellIcon, FilterIcon, MoreIcon } from '../components/icons';
 
@@ -37,6 +37,7 @@ interface HomePageProps {
   setActivePage: (page: Page) => void;
 }
 
+// Optimized: Component defined outside to prevent re-creation on render
 const Header: React.FC = () => (
     <div className="flex justify-between items-center p-4">
         <div className="flex items-center space-x-3">
@@ -53,6 +54,7 @@ const Header: React.FC = () => (
     </div>
 );
 
+// Optimized: Component defined outside
 const SongItem: React.FC<{ song: Song; onPlay: (song: Song) => void }> = ({ song, onPlay }) => (
     <button onClick={() => onPlay(song)} className="w-full flex items-center space-x-4 p-2 rounded-lg hover:bg-brand-card/50 text-left">
         <img src={song.coverArt} alt={song.title} className="w-14 h-14 rounded-md flex-shrink-0" />
@@ -66,24 +68,31 @@ const SongItem: React.FC<{ song: Song; onPlay: (song: Song) => void }> = ({ song
     </button>
 );
 
+// Optimized: Component defined outside
 const PromoCarousel: React.FC<{ setActivePage: (page: Page) => void }> = ({ setActivePage }) => {
     const [index, setIndex] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setIndex(prev => (prev + 1) % promoSlides.length);
+        }, 5000);
+        return () => clearInterval(interval);
+    }, []);
 
     const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
         const dragThreshold = 50;
         if (info.offset.x > dragThreshold) {
-            setIndex(prev => Math.max(0, prev - 1));
+            setIndex(prev => (prev - 1 + promoSlides.length) % promoSlides.length);
         } else if (info.offset.x < -dragThreshold) {
-            setIndex(prev => Math.min(promoSlides.length - 1, prev + 1));
+            setIndex(prev => (prev + 1) % promoSlides.length);
         }
     };
     
     const handleClick = (slideId: string) => {
         if(slideId === 'creator') {
             setActivePage(Page.Create);
-        } else if (slideId === 'promo') {
-            setActivePage(Page.Campaign);
         }
+        // Can add logic for 'promo' later
     }
 
     return (
@@ -92,7 +101,7 @@ const PromoCarousel: React.FC<{ setActivePage: (page: Page) => void }> = ({ setA
                 {promoSlides.map((slide, i) => (
                     <motion.div
                         key={slide.id}
-                        className={`absolute w-full h-full p-4 rounded-2xl flex flex-col justify-between ${slide.bgColor}`}
+                        className={`absolute w-full h-full p-4 rounded-2xl flex flex-col justify-between ${slide.bgColor} cursor-pointer`}
                         initial={{ x: '100%', opacity: 0, scale: 0.8 }}
                         animate={{
                             x: `${(i - index) * 100}%`,
@@ -122,7 +131,6 @@ const PromoCarousel: React.FC<{ setActivePage: (page: Page) => void }> = ({ setA
         </div>
     );
 }
-
 
 const HomePage: React.FC<HomePageProps> = ({ playSong, setActivePage }) => {
     return (

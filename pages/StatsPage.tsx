@@ -23,48 +23,63 @@ const mockDemographics: ChartData[] = [
 ];
 const COLORS = ['#1ED760', '#1DB954', '#158c42', '#0d5d2a', '#083b1b'];
 
+// Helper function to safely get AI client
+const getAiClient = (): GoogleGenAI | null => {
+    if (!process.env.API_KEY) {
+        return null;
+    }
+    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+};
+
 
 const StatsPage: React.FC = () => {
     const [insights, setInsights] = useState('');
     const [isLoadingInsights, setIsLoadingInsights] = useState(true);
 
-    const fetchInsights = async () => {
-        setIsLoadingInsights(true);
-        const dataSummary = {
-            weeklyStreams: mockStreams.reduce((acc, cur) => acc + cur.value, 0),
-            topRegion: mockDemographics[0].name,
-            streamsData: mockStreams,
-            demographicsData: mockDemographics
-        };
-        const prompt = `
-            As an expert music industry analyst for a Cameroonian artist, analyze the following data focusing on performance within Cameroon and provide actionable insights.
-            The response should be concise, mobile-friendly, and use markdown for formatting (bolding, lists).
-
-            Data:
-            - Total weekly streams: ${dataSummary.weeklyStreams}
-            - Top listening region in Cameroon: ${dataSummary.topRegion}
-            - Daily streams breakdown: ${JSON.stringify(dataSummary.streamsData)}
-            - Listener demographics by region in Cameroon: ${JSON.stringify(dataSummary.demographicsData)}
-
-            Provide:
-            1.  **Summary**: A quick overview of the week's performance in Cameroon.
-            2.  **Key Insights**: 2-3 bullet points on what the data means (e.g., peak days, regional audience concentration).
-            3.  **Growth Plan**: 2-3 actionable suggestions for the artist to grow their audience within Cameroon based on this data. (e.g., target promotions in specific regions, collaborate with artists from those regions).
-        `;
-
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-            setInsights(response.text);
-        } catch (error) {
-            console.error("Error fetching AI insights:", error);
-            setInsights("Could not load AI insights. Please check your connection or API key.");
-        } finally {
-            setIsLoadingInsights(false);
-        }
-    };
-
     useEffect(() => {
+        const fetchInsights = async () => {
+            setIsLoadingInsights(true);
+            const ai = getAiClient();
+
+            if (!ai) {
+                setInsights("Could not load AI insights. Gemini API key is not configured.");
+                setIsLoadingInsights(false);
+                return;
+            }
+
+            const dataSummary = {
+                weeklyStreams: mockStreams.reduce((acc, cur) => acc + cur.value, 0),
+                topRegion: mockDemographics[0].name,
+                streamsData: mockStreams,
+                demographicsData: mockDemographics
+            };
+            const prompt = `
+                As an expert music industry analyst for a Cameroonian artist, analyze the following data focusing on performance within Cameroon and provide actionable insights.
+                The response should be concise, mobile-friendly, and use markdown for formatting (bolding, lists).
+
+                Data:
+                - Total weekly streams: ${dataSummary.weeklyStreams}
+                - Top listening region in Cameroon: ${dataSummary.topRegion}
+                - Daily streams breakdown: ${JSON.stringify(dataSummary.streamsData)}
+                - Listener demographics by region in Cameroon: ${JSON.stringify(dataSummary.demographicsData)}
+
+                Provide:
+                1.  **Summary**: A quick overview of the week's performance in Cameroon.
+                2.  **Key Insights**: 2-3 bullet points on what the data means (e.g., peak days, regional audience concentration).
+                3.  **Growth Plan**: 2-3 actionable suggestions for the artist to grow their audience within Cameroon based on this data. (e.g., target promotions in specific regions, collaborate with artists from those regions).
+            `;
+
+            try {
+                const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+                setInsights(response.text);
+            } catch (error) {
+                console.error("Error fetching AI insights:", error);
+                setInsights("Could not load AI insights. Please check your connection or API key.");
+            } finally {
+                setIsLoadingInsights(false);
+            }
+        };
+
         fetchInsights();
     }, []);
 

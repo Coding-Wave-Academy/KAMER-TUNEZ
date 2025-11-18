@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Page, Song } from './types';
 import BottomNav from './components/BottomNav';
@@ -9,70 +9,120 @@ import HomePage from './pages/HomePage';
 import CreatePage from './pages/CreatePage';
 import StatsPage from './pages/StatsPage';
 import ProfilePage from './pages/ProfilePage';
-import CampaignPage from './pages/CampaignPage';
-
-const DAILY_GENERATION_LIMIT = 5;
 
 const App: React.FC = () => {
   const [activePage, setActivePage] = useState<Page>(Page.Home);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isFullScreenPlayerOpen, setFullScreenPlayerOpen] = useState(false);
-  const [generationCredits, setGenerationCredits] = useState(DAILY_GENERATION_LIMIT);
+  
+  // Centralized Audio Engine
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
 
-  const handlePlaySong = (song: Song) => {
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const setAudioData = () => setDuration(audio.duration);
+    const setAudioTime = () => setCurrentTime(audio.currentTime);
+    const handlePlaybackEnded = () => {
+      setIsPlaying(false);
+      // Optional: play next song in a queue here
+    };
+
+    audio.addEventListener('loadedmetadata', setAudioData);
+    audio.addEventListener('timeupdate', setAudioTime);
+    audio.addEventListener('ended', handlePlaybackEnded);
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', setAudioData);
+      audio.removeEventListener('timeupdate', setAudioTime);
+      audio.removeEventListener('ended', handlePlaybackEnded);
+    };
+  }, []);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.play().catch(e => console.error("Audio playback error:", e));
+    } else {
+      audio.pause();
+    }
+  }, [isPlaying]);
+
+  const handlePlaySong = useCallback((song: Song) => {
     setCurrentSong(song);
     setIsPlaying(true);
-  };
+    if (audioRef.current) {
+      audioRef.current.src = song.src;
+      audioRef.current.load();
+      audioRef.current.play().catch(e => console.error("Audio playback error on new song:", e));
+    }
+  }, []);
 
-  const handleTogglePlay = () => {
+  const handleTogglePlay = useCallback(() => {
     if (!currentSong) return;
     setIsPlaying(prev => !prev);
-  }
-  
-  const handleUseCredit = () => {
-    setGenerationCredits(prev => Math.max(0, prev - 1));
-  }
+  }, [currentSong]);
 
-  const handleClosePlayer = () => {
+  const handleClosePlayer = useCallback(() => {
     setIsPlaying(false);
     setCurrentSong(null);
     setFullScreenPlayerOpen(false);
-  }
+    if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+    }
+  }, []);
+  
+  const handleSeek = useCallback((time: number) => {
+    if (audioRef.current) {
+        audioRef.current.currentTime = time;
+        setCurrentTime(time);
+    }
+  }, []);
+
 
   const renderPage = () => {
+    const props = { playSong: handlePlaySong, setActivePage };
     switch (activePage) {
       case Page.Home:
-        return <HomePage playSong={handlePlaySong} setActivePage={setActivePage} />;
+        return <HomePage {...props} />;
       case Page.Create:
-        return <CreatePage playSong={handlePlaySong} setActivePage={setActivePage} generationCredits={generationCredits} onUseCredit={handleUseCredit} />;
+        return <CreatePage {...props} />;
       case Page.Stats:
         return <StatsPage />;
       case Page.Profile:
         return <ProfilePage />;
-      case Page.Campaign:
-         return <CampaignPage setActivePage={setActivePage} />;
       default:
-        return <HomePage playSong={handlePlaySong} setActivePage={setActivePage} />;
+        return <HomePage {...props} />;
     }
   };
 
   return (
     <>
+      {/* This single audio element powers the entire app */}
+      <audio ref={audioRef} preload="metadata" />
+
       <div className="md:hidden">
         <div className="bg-brand-dark min-h-screen text-white font-sans">
-          <main className={`pb-24 ${currentSong ? 'pb-44' : ''}`}>
+          <main className={currentSong ? 'pb-44' : 'pb-24'}>
             {renderPage()}
           </main>
           
           <AnimatePresence>
             {currentSong && !isFullScreenPlayerOpen && (
                <MiniPlayer 
-                  song={currentSong} 
+                  song={{...currentSong, layoutId: `cover-art-${currentSong.id}`}}
                   isPlaying={isPlaying} 
                   onTogglePlay={handleTogglePlay}
                   onClose={handleClosePlayer}
                   onOpenFullScreen={() => setFullScreenPlayerOpen(true)}
+                  currentTime={currentTime}
+                  duration={duration}
                />
             )}
           </AnimatePresence>
@@ -80,10 +130,13 @@ const App: React.FC = () => {
           <AnimatePresence>
             {isFullScreenPlayerOpen && currentSong && (
               <FullScreenPlayer
-                song={currentSong}
+                song={{...currentSong, layoutId: `cover-art-${currentSong.id}`}}
                 isPlaying={isPlaying}
                 onTogglePlay={handleTogglePlay}
                 onClose={() => setFullScreenPlayerOpen(false)}
+                currentTime={currentTime}
+                duration={duration}
+                onSeek={handleSeek}
               />
             )}
           </AnimatePresence>

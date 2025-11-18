@@ -4,7 +4,6 @@ export enum Page {
   Create = 'Create',
   Stats = 'Stats',
   Profile = 'Profile',
-  Campaign = 'Campaign',
 }
 
 export interface Song {
@@ -13,6 +12,7 @@ export interface Song {
   description: string;
   coverArt: string;
   src: string;
+  layoutId?: string;
 }
 
 export interface ChartData {
